@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+
+    <title>Wi-Fi Signal Strength Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: "DM Sans", sans-serif;
+            text-align: center;
+            padding: 20px;
+            background:  #8993A4; 
+        }
+
+        h1 {
+            color: #ffffff;
+        }
+
+        .input-group {
+            margin: 10px 0;
+        }
+
+        /* Buttons Styling */
+        .btn {
+            background: linear-gradient(135deg, #143968 , #8993A4); 
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 16px;
+            border-radius: 5px;
+            transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+        }
+
+        .btn:hover {
+            background-color: #143968;
+            transform: scale(1.05);
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .chart-container {
+            width: 90%;
+            max-width: 600px;
+            height: 300px;
+            margin: 0 auto;
+        }
+
+        #report-section {
+            margin-top: 20px;
+            display: none;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            resize: none;
+            padding: 10px;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Wi-Fi Signal Strength Monitor</h1>
+
+    <div class="input-group">
+        <label for="duration" style="color: #ffffff;">Enter duration (seconds):</label>
+        <input type="number" id="duration" placeholder="Duration in seconds" min="1">
+    </div>
+
+    <button id="start-btn" class="btn" onclick="startMonitoring()">Start Monitoring</button>
+    <button id="stop-btn" class="btn hidden" onclick="stopMonitoring()">Stop Monitoring</button>
+
+    <div class="chart-container">
+        <canvas id="signal-chart"></canvas>
+    </div>
+
+    <div id="report-section">
+        <h3 style="color: #ffffff;">Report Generated</h3>
+        <textarea id="report-output" readonly></textarea>
+        <button class="btn" onclick="downloadReport()">Download Report</button>
+    </div>
+
+    <script>
+        let chart;
+        let signalData = [];
+        let reportData = [];
+        let intervalId;
+        let monitoringActive = false;
+
+        // Initialize Chart.js graph
+        function initializeChart() {
+    const ctx = document.getElementById('signal-chart').getContext('2d');
+    chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Wi-Fi Signal Strength (dBm)',
+                data: [],
+                borderColor: 'rgba(255, 20, 147, 1)',
+                backgroundColor: 'rgba(255, 20, 147, 0.2)',
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+                duration: 500
+            },
+            scales: {
+                x: {
+                    title: { display: true, text: 'Time (s)', color: '#ffffff' },
+                    grid: { color: '#ffffff' }  // Ensure grid lines are visible with white color
+                },
+                y: {
+                    title: { display: true, text: 'Signal Strength (dBm)', color: '#ffffff' },
+                    min: -100,
+                    max: 0,
+                    grid: { color: '#ffffff' }  // Ensure grid lines are visible with white color
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: {
+                        color: '#ffffff'  // Set the legend label text color to white
+                    }
+                }
+            }
+        }
+    });
+}
+
+        // Start Wi-Fi monitoring based on user-defined duration
+        function startMonitoring() {
+            const duration = parseInt(document.getElementById('duration').value, 10);
+            if (isNaN(duration) || duration <= 0) {
+                alert("Please enter a valid duration.");
+                return;
+            }
+
+            // Reset data
+            signalData = [];
+            reportData = [];
+            chart.data.labels = [];
+            chart.data.datasets[0].data = [];
+            chart.update();
+
+            document.getElementById('report-section').style.display = 'none';
+
+            // Disable start button, enable stop button
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('stop-btn').classList.remove('hidden');
+
+            monitoringActive = true;
+            let secondsElapsed = 0;
+
+            intervalId = setInterval(() => {
+                if (secondsElapsed >= duration || !monitoringActive) {
+                    stopMonitoring();
+                    generateReport();
+                    return;
+                }
+
+                secondsElapsed++;
+                updateChart(secondsElapsed);
+            }, 1000);
+        }
+
+        // Stop monitoring before duration completes
+        function stopMonitoring() {
+            clearInterval(intervalId);
+            monitoringActive = false;
+
+            // Enable start button, hide stop button
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('stop-btn').classList.add('hidden');
+        }
+
+        // Update chart with new data every second
+        function updateChart(time) {
+            getWiFiSignalStrength().then(signalStrength => {
+                signalData.push(signalStrength);
+                reportData.push(`Time: ${time}s, Signal Strength: ${signalStrength} dBm`);
+
+                chart.data.labels.push(time);
+                chart.data.datasets[0].data.push(signalStrength);
+                chart.update();
+            }).catch(error => {
+                console.error("Error fetching signal strength:", error);
+            });
+        }
+
+        // Fetch the current Wi-Fi signal strength (Simulated API call)
+        async function getWiFiSignalStrength() {
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    resolve(Math.floor(Math.random() * 50) - 90); // Simulated between -90 and -40 dBm
+                }, 500);
+            });
+        }
+
+        // Generate the report after monitoring is done
+        function generateReport() {
+            const reportOutput = document.getElementById('report-output');
+            reportOutput.value = reportData.join("\n");
+            document.getElementById('report-section').style.display = 'block';
+        }
+
+        // Download the report as a text file
+        function downloadReport() {
+            const blob = new Blob([document.getElementById('report-output').value], { type: 'text/plain' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'wifi_signal_report.txt';
+            link.click();
+        }
+
+        // Initialize the chart on page load
+        window.onload = initializeChart;
+    </script>
+</body>
+</html>

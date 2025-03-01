@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+    
+    <title>Wi-Fi Information</title>
+    <style>
+        body {
+            font-family: "DM Sans", sans-serif;
+            text-align: center;
+            background:  #8993A4; 
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            overflow-x: hidden; /* Prevents horizontal scroll */
+        }
+        h1 {
+            color: #ffffff;
+            margin-bottom: 30px;
+        }
+        button {
+            background: linear-gradient(135deg, #143968 , #8993A4); 
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+            border-radius: 5px;
+            transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+            transform: scale(1.05);
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: left;
+            word-wrap: break-word;
+            margin: 20px 0;
+            max-height: 400px; /* Ensures content is visible */
+            overflow: auto; /* Adds scrolling if content overflows */
+        }
+        .error {
+            color: #dc3545;
+            padding: 10px;
+            background-color: #f8d7da;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #f4f4f4;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+            white-space: nowrap; /* Prevents text from breaking into new lines */
+        }
+
+        th {
+            background: linear-gradient(135deg, #143968, #8993A4); /* Gradient background */
+            color: white;
+        }
+
+        .table-container {
+            max-height: 400px; /* Prevents table cut-off */
+            overflow: auto; /* Ensures scrolling if content overflows */
+        }
+    </style>
+</head>
+<body>
+    <h1>Wi-Fi Information</h1>
+    
+    <div>
+        <button id="fetchWiFiInfo">Get Wi-Fi Info</button>
+        <button id="fetchConnectedDevices">Get Connected Devices</button>
+    </div>
+
+    <label>
+        <input type="checkbox" id="autoRefresh"> Auto-refresh every 10s
+    </label>
+
+    <pre id="wifiInfoOutput">Click the button to retrieve Wi-Fi information.</pre>
+    
+    <div class="table-container">
+        <table id="connectedDevicesTable">
+            <thead>
+                <tr>
+                    <th>IP Address</th>
+                    <th>MAC Address</th>
+                    <th>Type</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td colspan="3">Click the button to retrieve connected devices.</td></tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <script>
+        function displayError(elementId, message) {
+            document.getElementById(elementId).innerHTML = `<div class="error">${message}</div>`;
+        }
+
+        async function fetchWithTimeout(url, timeout = 5000) {
+            const controller = new AbortController();
+            const signal = controller.signal;
+            const timer = setTimeout(() => controller.abort(), timeout);
+
+            try {
+                const response = await fetch(url, { signal });
+                clearTimeout(timer);
+                if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+                return response.json();
+            } catch (error) {
+                clearTimeout(timer);
+                throw new Error(error.message || "Network timeout or request failed");
+            }
+        }
+
+        function cacheData(key, data, ttl = 30000) {
+            sessionStorage.setItem(key, JSON.stringify({ data, expiry: Date.now() + ttl }));
+        }
+
+        function getCachedData(key) {
+            const cached = JSON.parse(sessionStorage.getItem(key));
+            if (!cached || Date.now() > cached.expiry) return null;
+            return cached.data;
+        }
+
+        async function fetchWiFiInfo() {
+            const btn = document.getElementById('fetchWiFiInfo');
+            const output = document.getElementById('wifiInfoOutput');
+
+            btn.disabled = true;
+            btn.textContent = 'Fetching...';
+            output.textContent = 'Loading Wi-Fi info...';
+
+            const cachedData = getCachedData('wifiInfo');
+            if (cachedData) {
+                console.log("Using cached Wi-Fi data.");
+                output.textContent = cachedData;
+                btn.disabled = false;
+                btn.textContent = 'Get Wi-Fi Info';
+                return;
+            }
+
+            try {
+                const data = await fetchWithTimeout('/wifi-info', 5000);
+                if (data && data.data) {
+                    cacheData('wifiInfo', data.data);
+                    output.textContent = data.data;
+                } else {
+                    displayError('wifiInfoOutput', 'No Wi-Fi information found.');
+                }
+            } catch (error) {
+                displayError('wifiInfoOutput', `Error: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Get Wi-Fi Info';
+            }
+        }
+
+        function updateDevicesTable(devices) {
+            const tbody = document.querySelector("#connectedDevicesTable tbody");
+            tbody.innerHTML = devices.length
+                ? devices.map(d => `<tr><td>${d.ipAddress}</td><td>${d.macAddress}</td><td>${d.type}</td></tr>`).join('')
+                : `<tr><td colspan="3">No devices connected</td></tr>`;
+        }
+
+        async function fetchConnectedDevices() {
+            const btn = document.getElementById('fetchConnectedDevices');
+
+            btn.disabled = true;
+            btn.textContent = 'Fetching...';
+
+            const cachedData = getCachedData('connectedDevices');
+            if (cachedData) {
+                console.log("Using cached connected devices data.");
+                updateDevicesTable(cachedData);
+                btn.disabled = false;
+                btn.textContent = 'Get Connected Devices';
+                return;
+            }
+
+            try {
+                const data = await fetchWithTimeout('/connected-devices', 5000);
+                if (data && data.devices) {
+                    cacheData('connectedDevices', data.devices);
+                    updateDevicesTable(data.devices);
+                } else {
+                    displayError('connectedDevicesTable', 'No connected devices found.');
+                }
+            } catch (error) {
+                displayError('connectedDevicesTable', `Error: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Get Connected Devices';
+            }
+        }
+
+        let autoRefreshInterval;
+        document.getElementById('autoRefresh').addEventListener('change', function () {
+            if (this.checked) {
+                fetchWiFiInfo();
+                fetchConnectedDevices();
+                autoRefreshInterval = setInterval(() => {
+                    fetchWiFiInfo();
+                    fetchConnectedDevices();
+                }, 10000);
+            } else {
+                clearInterval(autoRefreshInterval);
+            }
+        });
+
+        document.getElementById('fetchWiFiInfo').addEventListener('click', fetchWiFiInfo);
+        document.getElementById('fetchConnectedDevices').addEventListener('click', fetchConnectedDevices);
+
+        // Notify parent iframe to resize
+        function notifyParentForHeight() {
+            if (window.parent) {
+                window.parent.postMessage({ height: document.body.scrollHeight }, "*");
+            }
+        }
+
+        window.onload = notifyParentForHeight;
+        window.onresize = notifyParentForHeight;
+    </script>
+
+</body>
+</html>
