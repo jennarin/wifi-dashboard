@@ -20,8 +20,21 @@
             height: 100vh;
             overflow-x: hidden;
             font-weight: bolder;
+            position: relative;
         }
-
+        body::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url("assets/noise.png"); /* Replace with your noise texture path */
+            opacity: 0.1; /* Adjust for more/less noise */
+            pointer-events: none; /* Ensures it doesn’t interfere with clicks */
+            z-index: 1; /* Keeps noise overlay above the background but below content */
+        }
+        
         /* Sidebar Navigation */
         .sidebar {
             width: 200px;
@@ -82,7 +95,7 @@
             overflow-y: auto;
             overflow-x: hidden; /* Prevent horizontal cut-off */
             transition: margin-left 0.3s ease-in-out;
-            width: calc(100% - 270px);
+            
         }
         .dashboard {
             display: grid;
